@@ -1,122 +1,124 @@
-from statistics import mean, stdev
-from random import shuffle
+import numpy as np
 import matplotlib.pyplot as plt
 
 
-class Hyperparameters:
-    def __init__(self, learning_rate=0.001, batch_size=50, number_epochs=20, eps=1e-6):
+class LinearRegressionModel:
+    def __init__(self):
+        self.fitted = False
+
+    def _zscore(self, features:np.ndarray) -> np.ndarray:
+        return (features - self.feature_mean) / self.feature_stdev
+
+    def _validate_data(self, features, labels):
+        if features.size == 0:
+            raise ValueError("Features are empty")
+        elif features.ndim != 2:
+            raise ValueError("Features are expected to be a matrix")
+        elif labels.size == 0:
+            raise ValueError("Labels are empty")
+        elif labels.ndim != 2:
+            raise ValueError("Labels are expected to be a matrix of size (n, 1)")
+        elif features.shape[0] != labels.shape[0]:
+            raise ValueError("Feature row sizes and label row sizes must be the same")
+        
+        self.feature_mean = np.mean(features, axis=0)
+        self.feature_stdev = np.std(features, axis=0, ddof=1)
+        self.feature_stdev = np.where(self.feature_stdev == 0, 1, self.feature_stdev)
+
+        self.features = self._zscore(features)
+        self.labels = labels
+
+    def _validate_hyperparameters(self, learning_rate, batch_size, number_epochs, eps):
         if learning_rate <= 0:
-            raise ValueError("Learning rate must be higher than 0")
-        elif batch_size <= 0:
-            raise ValueError("Batch size must be higher than 0")
+            raise ValueError("Learning rate must be bigger than 0")
+        elif batch_size != None and batch_size <= 0:
+            raise ValueError("Batch size must be bigger than 0")
+        elif batch_size != None and batch_size > self.features.shape[0]:
+            raise ValueError("Batch size can't be bigger than label size")
         elif number_epochs <= 0:
-            raise ValueError("Number of epochs must be higher than 0")
+            raise ValueError("Number of epochs must be bigger than 0")
         elif eps <= 0:
             raise ValueError("Epsilon (tolerance for loss difference) must be positive")
 
         self.learning_rate = learning_rate
-        self.batch_size = batch_size
+        self.batch_size = batch_size if batch_size is not None else self.features.shape[0]
         self.number_epochs = number_epochs
         self.eps = eps
 
+    def _shuffle_dataset(self):
+        indices = np.arange(len(self.labels))
+        np.random.shuffle(indices)
 
-class Model:
-    class Parameters:
-        def __init__(self):
-            self.bias = 0.0
-            self.weight = 0.0
+        self.labels = self.labels[indices]
+        self.features = self.features[indices]
 
-    def _normalize_features_zscore(self):
-        self.features_mean = mean(self.features)
-        self.features_stdev = stdev(self.features)
+    def mean_squared_error(self, predicted_labels:np.ndarray, true_labels:np.ndarray) -> float: 
+        if predicted_labels.shape[0] != true_labels.shape[0]:
+            raise ValueError("Labels size and predicted labels size must be the same")
 
-        if self.features_stdev == 0:
-            print("Standard deviation of features is zero, normalization impossible")
-            return
+        return np.mean(np.square(predicted_labels - true_labels))
 
-        self.features = [(feature - self.features_mean) / self.features_stdev for feature in self.features]
+    def _update_parameters(self, features:np.ndarray, predicted_labels:np.ndarray, true_labels:np.ndarray):
+        error = predicted_labels - true_labels
+        n = features.shape[0]
 
-    def __init__(self, labels: list[float], features: list[float], hyperparameters: Hyperparameters):
-        if len(labels) != len(features):
-            raise ValueError("Label and feature sizes are different")
-        elif len(labels) == 0:
-            raise ValueError("Label/feature sizes must be higher than 0")
-        elif hyperparameters.batch_size > len(labels):
-            raise ValueError("Batch size can't be higher than label/feature sizes")
+        bias_derivative = 2 * np.sum(error) / n
+        weight_derivatives = 2 * (features.T @ error) / n
 
-        self.labels = labels
-        self.features = features
-        self._normalize_features_zscore()
-        self.hyperparameters = hyperparameters
-        self.parameters = Model.Parameters()
+        self.bias -= bias_derivative * self.learning_rate
+        self.weights -= weight_derivatives * self.learning_rate
 
-    def _mse_loss(self, predicted_labels: list[float], true_labels: list[float]) -> float: 
-        if len(predicted_labels) != len(true_labels):
-            raise ValueError("Lengths of true labels and predicted labels are different")
+    def fit(self, features:np.ndarray, labels:np.ndarray, 
+            learning_rate:float=0.01, batch_size:int=None, number_epochs:int=100, eps:float=1e-6):
+        self._validate_data(features, labels)
+        self._validate_hyperparameters(learning_rate, batch_size, number_epochs, eps)
+        
+        self.fitted = True
+        self.epoch_losses = []
+        self.bias = 0.0
+        self.weights = np.zeros((self.features.shape[1], 1))
 
-        N = len(true_labels) # nwm czy tutaj nie powinien byc inny len
-        L2 = sum([(true_labels[i] - predicted_labels[i]) ** 2 for i in range(N)])
+        for epoch_idx in range(self.number_epochs):
+            batch_losses = []
+            self._shuffle_dataset()
 
-        return 1/N * L2
+            for batch_idx in range(0, self.features.shape[0], self.batch_size):
+                features_batch = self.features[batch_idx : batch_idx + self.batch_size, :]
+                predicted_labels = (features_batch @ self.weights + self.bias).reshape((features_batch.shape[0], 1))
+                true_labels = self.labels[batch_idx : batch_idx + self.batch_size, :]
 
-    def _update_parameters(self, features_slice: list[float], predicted_labels: list[float], true_labels: list[float]):
-        # Supports only MSE loss methods
+                curr_loss = self.mean_squared_error(predicted_labels, true_labels)
+                batch_losses.append(curr_loss)
 
-        if not (len(predicted_labels) == len(true_labels) == len(features_slice)):
-            raise ValueError("Lengths of true labels and predicted labels are different")
+                self._update_parameters(features_batch, predicted_labels, true_labels) 
 
-        weight_derivative = 0.0
-        bias_derivative = 0.0
-
-        for i in range(len(predicted_labels)):
-            prediction_diff = predicted_labels[i] - true_labels[i]
-            weight_derivative += features_slice[i] * prediction_diff
-            bias_derivative += prediction_diff
-
-        derivative_constants = 2 / len(predicted_labels) 
-        weight_derivative *= derivative_constants
-        bias_derivative *= derivative_constants
-
-        self.parameters.weight -= self.hyperparameters.learning_rate * weight_derivative
-        self.parameters.bias -= self.hyperparameters.learning_rate * bias_derivative
-
-    def train(self, plot_losses: bool = False):
-        losses = []
-
-        for _ in range(self.hyperparameters.number_epochs):
-            temp = list(zip(self.labels, self.features))
-            shuffle(temp)
-            self.labels, self.features = zip(*temp)
-            self.labels, self.features = list(self.labels), list(self.features)
-
-            for i in range(0, len(self.features), self.hyperparameters.batch_size):
-                batch = self.features[i : i + self.hyperparameters.batch_size]
-                predicted_labels = [self.parameters.weight * feature + self.parameters.bias for feature in batch]
-                true_labels = self.labels[i : i + self.hyperparameters.batch_size]
-                features_slice = self.features[i : i + self.hyperparameters.batch_size]
-                curr_loss = self._mse_loss(predicted_labels, true_labels)
-                self._update_parameters(features_slice, predicted_labels, true_labels)
-
-            print(f"Epoch {_ + 1}, loss={curr_loss}")
-
-            if len(losses) and abs(curr_loss - losses[-1]) < self.hyperparameters.eps:
+            batch_losses_avg = np.mean(batch_losses)
+            # print(f"Epoch {epoch_idx + 1}, loss={batch_losses_avg}")
+            
+            if len(self.epoch_losses) and abs(batch_losses_avg - self.epoch_losses[-1]) < self.eps:
+                # print('Model already converged')
                 break
+            
+            self.epoch_losses.append(batch_losses_avg)
+        # print('')
+        return self
 
-            losses.append(curr_loss)
-        print('')
+    def plot_losses(self):
+        if not self.fitted:
+            raise RuntimeError("Model must be fitted before plotting losses per epoch")
+        
+        fig, ax = plt.subplots()
+        ax.plot([i for i in range(len(self.epoch_losses))], self.epoch_losses)
+        ax.set_title("Training loss")
+        ax.set_xlabel("Epochs")
+        ax.set_ylabel("Loss")
+        plt.show()
 
-        if plot_losses:
-            fig, ax = plt.subplots()
-            ax.plot([i for i in range(len(losses))], losses)
-            ax.set_title("Training loss")
-            ax.set_xlabel("Epochs")
-            ax.set_ylabel("Loss")
-            plt.show()
+    def predict(self, features: np.ndarray) -> np.ndarray:
+        if not self.fitted:
+            raise RuntimeError("Model must be fitted before prediction")
+        elif features.shape[1] != self.weights.shape[0]:
+            raise ValueError("Feature dimensions are different from feature dimensions in the training set")
 
-    def predict(self, feature: float) -> float:
-        if self.features_stdev == 0:
-            print("Standard deviation of features is zero, normalization impossible")
-            return self.parameters.weight * feature + self.parameters.bias
-
-        normalized_feature = (feature - self.features_mean) / self.features_stdev
-        return self.parameters.weight * normalized_feature + self.parameters.bias
+        features = self._zscore(features)
+        return features @ self.weights + self.bias

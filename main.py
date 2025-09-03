@@ -1,28 +1,47 @@
 # Import necessary libraries
 import pandas as pd
 import matplotlib.pyplot as plt
-from ml_components import Model, Hyperparameters
+from sklearn.linear_model import LinearRegression
+from ml_components import LinearRegressionModel
+
+data_file_path = 'Car_Price_Prediction.csv'
 
 # Upload data into DataFrame
-car_pricing_df = pd.read_csv('Car_Price_Prediction.csv')
-print(car_pricing_df.head(len(car_pricing_df) // 5), end='\n\n')
+df = pd.read_csv(data_file_path)
+print(df.head(int(len(df) * 0.2)), end='\n\n') # Print first 20% of data
 
 # Show basic metadata
-print(car_pricing_df.describe(), end='\n\n')
-print(car_pricing_df.corr(numeric_only = True), end='\n\n') # Correlation matrix
+print(df.describe(), end='\n\n') # Print basic metadata
+print(df.corr(numeric_only = True), end='\n\n') # Print correlation matrix
 
-# Visualise our data
-pd.plotting.scatter_matrix(car_pricing_df, figsize=(8, 8))
+# Visualise data
+pd.plotting.scatter_matrix(df, figsize=(8, 8))
 plt.subplots_adjust(wspace=0.2, hspace=0.2)
 plt.show()
 
-# Init model
-hyperparameters = Hyperparameters(batch_size=100, number_epochs=200)
-model = Model(car_pricing_df['Price'].to_list(), car_pricing_df['Mileage'].to_list(), hyperparameters)
+# Prepare data
+x = df[['Year', 'Engine Size', 'Mileage']].to_numpy()
+y = df[['Price']].to_numpy()
 
-# Train model
-model.train(plot_losses=True)
+x_len = x.shape[0]
+y_len = y.shape[0]
 
-# Test prediction
-test_feature = 97000
-print(f"Feature: {test_feature}, Model's prediction: {model.predict(test_feature)}")
+test_data_ratio = 0.2
+
+x_train = x[:-int(x_len * test_data_ratio)]
+x_test = x[int(x_len * test_data_ratio):]
+
+y_train = y[:-int(y_len * test_data_ratio)]
+y_test = y[int(y_len * test_data_ratio):]
+
+# Train models
+scikit_model = LinearRegression().fit(x_train, y_train)
+own_model = LinearRegressionModel().fit(x_train, y_train, number_epochs=1000)
+
+# Compare results
+scikit_models_prediction = scikit_model.predict(x_test)
+own_models_prediction = own_model.predict(x_test)
+
+print(f"Scikit's prediction: {scikit_models_prediction}")
+print(f"Author model's prediction: {own_models_prediction}")
+print(f"Difference between models' prediction: {abs(scikit_models_prediction - own_models_prediction)}")
