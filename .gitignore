@@ -4,5 +4,5 @@ include
 lib
 lib64
 share
-Car_Price_Prediction.csv
 pyvenv.cfg
+*.csv

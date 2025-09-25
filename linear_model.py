@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-class LinearRegressionModel:
+class LinearRegression:
     def __init__(self):
         self.fitted = False
 
@@ -31,11 +31,11 @@ class LinearRegressionModel:
     def _validate_hyperparameters(self, learning_rate, batch_size, number_epochs, eps):
         if learning_rate <= 0:
             raise ValueError("Learning rate must be bigger than 0")
-        elif batch_size != None and batch_size <= 0:
+        elif batch_size is not None and batch_size <= 0:
             raise ValueError("Batch size must be bigger than 0")
-        elif batch_size != None and batch_size > self.features.shape[0]:
+        elif batch_size is not None and batch_size > self.features.shape[0]:
             raise ValueError("Batch size can't be bigger than label size")
-        elif number_epochs <= 0:
+        elif number_epochs is not None and number_epochs <= 0:
             raise ValueError("Number of epochs must be bigger than 0")
         elif eps <= 0:
             raise ValueError("Epsilon (tolerance for loss difference) must be positive")
@@ -52,7 +52,8 @@ class LinearRegressionModel:
         self.labels = self.labels[indices]
         self.features = self.features[indices]
 
-    def mean_squared_error(self, predicted_labels:np.ndarray, true_labels:np.ndarray) -> float: 
+    @staticmethod
+    def mean_squared_error(predicted_labels:np.ndarray, true_labels:np.ndarray) -> float: 
         if predicted_labels.shape[0] != true_labels.shape[0]:
             raise ValueError("Labels size and predicted labels size must be the same")
 
@@ -69,7 +70,7 @@ class LinearRegressionModel:
         self.weights -= weight_derivatives * self.learning_rate
 
     def fit(self, features:np.ndarray, labels:np.ndarray, 
-            learning_rate:float=0.01, batch_size:int=None, number_epochs:int=100, eps:float=1e-6):
+            learning_rate:float=0.01, batch_size:int=None, number_epochs:int=None, eps:float=1e-6):
         self._validate_data(features, labels)
         self._validate_hyperparameters(learning_rate, batch_size, number_epochs, eps)
         
@@ -78,7 +79,8 @@ class LinearRegressionModel:
         self.bias = 0.0
         self.weights = np.zeros((self.features.shape[1], 1))
 
-        for epoch_idx in range(self.number_epochs):
+        epoch_idx = 0
+        while self.number_epochs is None or epoch_idx < self.number_epochs:
             batch_losses = []
             self._shuffle_dataset()
 
@@ -93,14 +95,13 @@ class LinearRegressionModel:
                 self._update_parameters(features_batch, predicted_labels, true_labels) 
 
             batch_losses_avg = np.mean(batch_losses)
-            # print(f"Epoch {epoch_idx + 1}, loss={batch_losses_avg}")
             
             if len(self.epoch_losses) and abs(batch_losses_avg - self.epoch_losses[-1]) < self.eps:
-                # print('Model already converged')
                 break
             
             self.epoch_losses.append(batch_losses_avg)
-        # print('')
+            epoch_idx += 1
+
         return self
 
     def plot_losses(self):
@@ -108,7 +109,7 @@ class LinearRegressionModel:
             raise RuntimeError("Model must be fitted before plotting losses per epoch")
         
         fig, ax = plt.subplots()
-        ax.plot([i for i in range(len(self.epoch_losses))], self.epoch_losses)
+        ax.plot(range(len(self.epoch_losses)), self.epoch_losses)
         ax.set_title("Training loss")
         ax.set_xlabel("Epochs")
         ax.set_ylabel("Loss")
