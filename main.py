@@ -8,7 +8,7 @@ from linear_model import LinearRegression as MlFunLinearRegression
 
 from time import time_ns
 
-welcome_msg = 'COMPARE LINEAR REGRESSION MODEL TO SCIKIT'
+welcome_msg = 'COMPARE ML FUN LINEAR REGRESSION MODEL TO SCIKIT'
 print(f"{ welcome_msg }\n{ len(welcome_msg)*'#' }\n")
 
 filepath = input('Enter the filepath to the .csv file: ')
@@ -27,7 +27,7 @@ print(df.describe(), end='\n\n') # Print basic metadata
 df_corr = df.corr(numeric_only=True)
 print(df_corr, end='\n\n') # Print correlation matrix
 
-label = input('What label do you want to test?: ')
+label = input('What label do you want to train?: ')
 if label not in df.columns:
     print(f'No label named "{label}" in the DataFrame')
     exit(2)
@@ -36,7 +36,7 @@ n = int(input('How many most correlated features do you want to use?: '))
 if n < 0 or n >= df.shape[1]:
     print(f'Invalid number of features')
     exit(3)
-    
+
 print('')
 
 # Find top n most correlated features to the label
